@@ -1,8 +1,36 @@
 import java.util.*;
 
-class InvalidBookingException extends Exception {
-    public InvalidBookingException(String message) {
-        super(message);
+class Reservation {
+    private String reservationId;
+    private String roomType;
+    private String roomId;
+    private boolean active;
+
+    public Reservation(String reservationId, String roomType, String roomId) {
+        this.reservationId = reservationId;
+        this.roomType = roomType;
+        this.roomId = roomId;
+        this.active = true;
+    }
+
+    public String getReservationId() {
+        return reservationId;
+    }
+
+    public String getRoomType() {
+        return roomType;
+    }
+
+    public String getRoomId() {
+        return roomId;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public void cancel() {
+        active = false;
     }
 }
 
@@ -10,54 +38,72 @@ class InventoryService {
     private Map<String, Integer> inventory = new HashMap<>();
 
     public InventoryService() {
-        inventory.put("Single Room", 2);
+        inventory.put("Single Room", 1);
         inventory.put("Double Room", 1);
         inventory.put("Suite Room", 0);
     }
 
-    public void validateRoomType(String roomType) throws InvalidBookingException {
-        if (!inventory.containsKey(roomType)) {
-            throw new InvalidBookingException("Invalid room type: " + roomType);
-        }
+    public void increment(String roomType) {
+        inventory.put(roomType, inventory.get(roomType) + 1);
     }
 
-    public void checkAvailability(String roomType) throws InvalidBookingException {
-        if (inventory.get(roomType) <= 0) {
-            throw new InvalidBookingException("No availability for " + roomType);
+    public void displayInventory() {
+        for (Map.Entry<String, Integer> e : inventory.entrySet()) {
+            System.out.println(e.getKey() + " : " + e.getValue());
         }
-    }
-
-    public void allocateRoom(String roomType) {
-        inventory.put(roomType, inventory.get(roomType) - 1);
     }
 }
 
-class BookingService {
+class CancellationService {
+    private Map<String, Reservation> reservations = new HashMap<>();
+    private Stack<String> rollbackStack = new Stack<>();
     private InventoryService inventory;
 
-    public BookingService(InventoryService inventory) {
+    public CancellationService(InventoryService inventory) {
         this.inventory = inventory;
     }
 
-    public void processBooking(String guestName, String roomType) {
-        try {
-            inventory.validateRoomType(roomType);
-            inventory.checkAvailability(roomType);
-            inventory.allocateRoom(roomType);
-            System.out.println("Booking confirmed for " + guestName + " | Room Type: " + roomType);
-        } catch (InvalidBookingException e) {
-            System.out.println("Booking failed: " + e.getMessage());
+    public void addReservation(Reservation r) {
+        reservations.put(r.getReservationId(), r);
+    }
+
+    public void cancelReservation(String reservationId) {
+        if (!reservations.containsKey(reservationId)) {
+            System.out.println("Cancellation failed: reservation not found");
+            return;
         }
+
+        Reservation r = reservations.get(reservationId);
+
+        if (!r.isActive()) {
+            System.out.println("Cancellation failed: reservation already cancelled");
+            return;
+        }
+
+        rollbackStack.push(r.getRoomId());
+        inventory.increment(r.getRoomType());
+        r.cancel();
+
+        System.out.println("Reservation cancelled: " + reservationId + " Room released: " + rollbackStack.pop());
     }
 }
 
 public class BookMyStayApp {
     public static void main(String[] args) {
-        InventoryService inventory = new InventoryService();
-        BookingService bookingService = new BookingService(inventory);
 
-        bookingService.processBooking("Alice", "Single Room");
-        bookingService.processBooking("Bob", "Suite Room");
-        bookingService.processBooking("Charlie", "Luxury Room");
+        InventoryService inventory = new InventoryService();
+        CancellationService service = new CancellationService(inventory);
+
+        Reservation r1 = new Reservation("R201", "Single Room", "SR1");
+        Reservation r2 = new Reservation("R202", "Double Room", "DR1");
+
+        service.addReservation(r1);
+        service.addReservation(r2);
+
+        service.cancelReservation("R201");
+        service.cancelReservation("R201");
+        service.cancelReservation("R999");
+
+        inventory.displayInventory();
     }
 }
